@@ -130,14 +130,14 @@ app/
   "descricao": "string",
   "data_criacao": "datetime",
   "imagem_url": "url",
-  "local": {                    // Embedding
+  "local": {                    
     "nome": "string",
     "latitude": "float",
     "longitude": "float", 
     "bairro": "string",
     "cidade": "string"
   },
-  "artista_ids": ["ObjectId"],  // Referências
+  "artista_ids": ["ObjectId"],  
   "tags": ["string"]
 }
 ```
@@ -146,8 +146,8 @@ app/
 ```json
 {
   "_id": "ObjectId",
-  "mural_id": "ObjectId",      // Referência
-  "usuario_id": "ObjectId",    // Referência
+  "mural_id": "ObjectId",     
+  "usuario_id": "ObjectId",    
   "nota": "int (1-5)",
   "comentario": "string",
   "data": "datetime"

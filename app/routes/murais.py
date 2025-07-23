@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+from fastapi import Query
 
 from config.database import get_database
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
@@ -54,32 +55,82 @@ async def contar_murais_por_bairro(
     return {"bairro": bairro, "total_murais": count}
 
 
-@router.get("/top-artistas", response_model=List[Dict[str, Any]])
-async def top_artistas_por_murais(
-    limit: int = Query(5, ge=1, le=20, description="Quantidade de artistas"),
+@router.get("/top-artistas")
+async def obter_top_artistas(
+    limit: int = Query(5, ge=1, le=20, description="Número de artistas"),
     service: MuralService = Depends(get_mural_service),
 ):
-    """F7 - Top artistas com mais murais"""
-    return await service.get_top_artistas_by_murais(limit)
+    """F5 - Top artistas com mais murais"""
+    return await service.get_top_artistas_by_murais(limit=limit)
 
 
-@router.get("/media-avaliacao-bairro", response_model=List[Dict[str, Any]])
-async def media_avaliacao_por_bairro(
+@router.get("/media-por-bairro")
+async def obter_media_avaliacao_por_bairro(
     service: MuralService = Depends(get_mural_service),
 ):
-    """F7 - Média de avaliação por bairro"""
+    """F6 - Média de avaliação por bairro"""
     return await service.get_media_avaliacao_por_bairro()
 
 
-@router.get("/{mural_id}", response_model=Mural)
+# MOVER ESTAS ROTAS PARA ANTES DA ROTA /{mural_id}
+@router.get("/by-date-range")
+async def obter_murais_por_periodo(
+    start_date: str = Query(..., description="Data de início (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="Data de fim (YYYY-MM-DD)"),
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    service: MuralService = Depends(get_mural_service),
+):
+    """F7 - Filtrar murais por intervalo de datas"""
+    try:
+        # Converter strings para datetime
+        start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+        end_datetime = datetime.strptime(end_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+
+        return await service.get_by_date_range(
+            start_datetime, end_datetime, page, limit
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato de data inválido. Use YYYY-MM-DD. Erro: {str(e)}",
+        )
+    except Exception as e:
+        print(f"Erro interno: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")
+
+
+@router.get("/by-year/{year}")
+async def obter_murais_por_ano(
+    year: int = Path(..., description="Ano (ex: 2025)"),
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    service: MuralService = Depends(get_mural_service),
+):
+    """F8 - Filtrar murais por ano"""
+    try:
+        return await service.get_by_year(year, page, limit)
+    except Exception as e:
+        print(f"Erro interno: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")
+
+
+# ESTA ROTA DEVE VIR POR ÚLTIMO (depois das rotas específicas)
+@router.get("/{mural_id}", response_model=dict)
 async def obter_mural(
     mural_id: str, service: MuralService = Depends(get_mural_service)
 ):
     """F3 - Obter mural por ID"""
-    mural = await service.get_by_id(mural_id)
-    if not mural:
-        raise HTTPException(status_code=404, detail="Mural não encontrado")
-    return mural
+    try:
+        mural = await service.get_by_id(mural_id)
+        if not mural:
+            raise HTTPException(status_code=404, detail="Mural não encontrado")
+        return mural
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID do mural inválido")
+    except Exception as e:
+        print(f"Erro interno: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
 
 @router.put("/{mural_id}", response_model=dict)
@@ -104,34 +155,3 @@ async def deletar_mural(
     if not success:
         raise HTTPException(status_code=404, detail="Mural não encontrado")
     return {"message": "Mural deletado com sucesso"}
-
-
-@router.get("/by-date-range")
-async def get_murais_by_date_range(
-    start_date: str = Query(..., description="Data inicial (YYYY-MM-DD)"),
-    end_date: str = Query(..., description="Data final (YYYY-MM-DD)"),
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    service: MuralService = Depends(get_mural_service),
-):
-    """Filtrar murais por intervalo de datas"""
-    try:
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-
-        return await service.get_by_date_range(start, end, page, limit)
-    except ValueError:
-        raise HTTPException(
-            status_code=400, detail="Formato de data inválido. Use YYYY-MM-DD"
-        )
-
-
-@router.get("/by-year/{year}")
-async def get_murais_by_year(
-    year: int = Path(..., ge=1900, le=2100),
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    service: MuralService = Depends(get_mural_service),
-):
-    """Filtrar murais por ano"""
-    return await service.get_by_year(year, page, limit)

@@ -1,9 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
-
-from .local import Local
+from pydantic import BaseModel, Field, HttpUrl, validator
 
 
 class MuralBase(BaseModel):
@@ -14,7 +12,7 @@ class MuralBase(BaseModel):
 
 
 class MuralCreate(MuralBase):
-    local: dict
+    local_id: str = Field(..., description="ID do local onde está o mural")
     artista_ids: List[str] = Field(default_factory=list)
 
 
@@ -23,13 +21,14 @@ class MuralUpdate(BaseModel):
     descricao: Optional[str] = Field(None, max_length=2000)
     imagem_url: Optional[HttpUrl] = None
     tags: Optional[List[str]] = None
+    local_id: Optional[str] = None
     artista_ids: Optional[List[str]] = None
 
 
 class Mural(MuralBase):
     id: str = Field(alias="_id")
     data_criacao: datetime
-    local: Local
+    local_id: str
     artista_ids: List[str] = Field(default_factory=list)
 
     class Config:

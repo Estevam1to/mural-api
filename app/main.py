@@ -6,6 +6,7 @@ from config.settings import Settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import artistas, avaliacoes, locais, murais, usuarios
+from middleware.error_handler import ErrorHandlerMiddleware
 
 settings = Settings()
 
@@ -31,6 +32,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(ErrorHandlerMiddleware)
 
 app.include_router(murais.router)
 app.include_router(artistas.router)

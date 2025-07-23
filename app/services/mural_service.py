@@ -3,8 +3,10 @@ from typing import Any, Dict, List, Optional
 
 from models.mural import MuralCreate, MuralUpdate
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
 
 from .base import BaseService
+from .artista_service import ArtistaService
 
 
 class MuralService(BaseService):
@@ -35,15 +37,24 @@ class MuralService(BaseService):
             filters["tags"] = {"$in": [tag]}
 
         if artista_id:
-            filters["artista_ids"] = {"$in": [artista_id]}
+            filters["artista_ids"] = {"$in": [ObjectId(artista_id)]}
 
-        return await self.list_with_pagination(
-            filters=filters,
-            page=page,
-            limit=limit,
-            sort_by="data_criacao",
-            sort_order=-1,
+        # Get paginated results
+        skip = (page - 1) * limit
+        murais = (
+            await self.collection.find(filters).skip(skip).limit(limit).to_list(limit)
         )
+        total = await self.collection.count_documents(filters)
+
+        # Serialize each mural
+        serialized_murais = [self._serialize_mural(mural) for mural in murais]
+
+        return {
+            "murais": serialized_murais,
+            "total": total,
+            "page": page,
+            "pages": (total + limit - 1) // limit if total > 0 else 0,
+        }
 
     async def count_by_bairro(self, bairro: str) -> int:
         """Conta murais por bairro"""
@@ -107,3 +118,107 @@ class MuralService(BaseService):
 
         cursor = self.collection.aggregate(pipeline)
         return await cursor.to_list(length=None)
+
+    async def get_by_date_range(
+        self, start_date: datetime, end_date: datetime, page: int = 1, limit: int = 10
+    ):
+        """Buscar murais por intervalo de datas"""
+        filter_query = {"data_criacao": {"$gte": start_date, "$lte": end_date}}
+
+        skip = (page - 1) * limit
+        murais = (
+            await self.collection.find(filter_query)
+            .skip(skip)
+            .limit(limit)
+            .to_list(limit)
+        )
+        total = await self.collection.count_documents(filter_query)
+
+        return {
+            "murais": [self._serialize_mural(mural) for mural in murais],
+            "total": total,
+            "page": page,
+            "pages": (total + limit - 1) // limit,
+        }
+
+    async def get_by_year(self, year: int, page: int = 1, limit: int = 10):
+        """Buscar murais por ano"""
+        start_date = datetime(year, 1, 1)
+        end_date = datetime(year, 12, 31, 23, 59, 59)
+
+        return await self.get_by_date_range(start_date, end_date, page, limit)
+
+    async def create(self, mural_data: dict) -> dict:
+        """Criar mural com validação de relacionamentos"""
+        # Converter HttpUrl para string se presente
+        if "imagem_url" in mural_data and mural_data["imagem_url"]:
+            mural_data["imagem_url"] = str(mural_data["imagem_url"])
+
+        # Validar se artistas existem
+        if "artista_ids" in mural_data and mural_data["artista_ids"]:
+            artista_service = ArtistaService(self.database)
+            for artista_id in mural_data["artista_ids"]:
+                artista = await artista_service.get_by_id(artista_id)
+                if not artista:
+                    raise ValueError(f"Artista com ID {artista_id} não encontrado")
+
+        # Converter string IDs para ObjectId
+        if "artista_ids" in mural_data:
+            mural_data["artista_ids"] = [
+                ObjectId(id) for id in mural_data["artista_ids"]
+            ]
+
+        mural_data["data_criacao"] = datetime.utcnow()
+        result = await self.collection.insert_one(mural_data)
+
+        created_mural = await self.collection.find_one({"_id": result.inserted_id})
+        return self._serialize_mural(created_mural)
+
+    async def update(self, mural_id: str, update_data: dict) -> dict:
+        """Atualizar mural com validação de relacionamentos"""
+        # Converter HttpUrl para string se presente
+        if "imagem_url" in update_data and update_data["imagem_url"]:
+            update_data["imagem_url"] = str(update_data["imagem_url"])
+
+        # Validar se artistas existem ao atualizar
+        if "artista_ids" in update_data and update_data["artista_ids"]:
+            artista_service = ArtistaService(self.database)
+            for artista_id in update_data["artista_ids"]:
+                artista = await artista_service.get_by_id(artista_id)
+                if not artista:
+                    raise ValueError(f"Artista com ID {artista_id} não encontrado")
+
+            # Converter para ObjectId
+            update_data["artista_ids"] = [
+                ObjectId(id) for id in update_data["artista_ids"]
+            ]
+
+        # Remove campos None
+        update_data = {k: v for k, v in update_data.items() if v is not None}
+
+        if not update_data:
+            raise ValueError("Nenhum campo válido para atualização")
+
+        result = await self.collection.update_one(
+            {"_id": ObjectId(mural_id)}, {"$set": update_data}
+        )
+
+        if result.matched_count == 0:
+            return None
+
+        updated_mural = await self.collection.find_one({"_id": ObjectId(mural_id)})
+        return self._serialize_mural(updated_mural)
+
+    def _serialize_mural(self, mural: dict) -> dict:
+        """Serializa um mural para o formato de resposta"""
+        if not mural:
+            return None
+
+        mural["id"] = str(mural["_id"])
+        del mural["_id"]
+
+        # Converter ObjectIds para strings
+        if "artista_ids" in mural and mural["artista_ids"]:
+            mural["artista_ids"] = [str(id) for id in mural["artista_ids"]]
+
+        return mural

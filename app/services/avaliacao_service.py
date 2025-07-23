@@ -2,16 +2,21 @@ from datetime import datetime
 from typing import Any, Dict
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
 
 from models.avaliacao import AvaliacaoCreate, AvaliacaoUpdate
 from .base import BaseService
+from .mural_service import MuralService
+from .usuario_service import UsuarioService
 
 
 class AvaliacaoService(BaseService):
     def __init__(self, database: AsyncIOMotorDatabase):
         super().__init__(database, "avaliacoes")
 
-    async def create_avaliacao(self, avaliacao_data: AvaliacaoCreate) -> str:
+    async def create_avaliacao(
+        self, avaliacao_data: AvaliacaoCreate
+    ) -> dict:  # Changed return type
         """Cria uma nova avaliação"""
         # Verificar se usuário já avaliou este mural
         existing = await self.collection.find_one(
@@ -23,9 +28,20 @@ class AvaliacaoService(BaseService):
         if existing:
             raise ValueError("Usuário já avaliou este mural")
 
+        # Verificar se mural existe
+        mural_service = MuralService(self.database)
+        mural = await mural_service.get_by_id(avaliacao_data.mural_id)
+        if not mural:
+            raise ValueError("Mural não encontrado")
+
+        # Verificar se usuário existe
+        usuario_service = UsuarioService(self.database)
+        usuario = await usuario_service.get_by_id(avaliacao_data.usuario_id)
+        if not usuario:
+            raise ValueError("Usuário não encontrado")
+
         data = avaliacao_data.dict()
-        data["data"] = datetime.utcnow()
-        return await self.create(data)
+        return await self.create(data)  # This returns the serialized dict
 
     async def update_avaliacao(self, id: str, avaliacao_data: AvaliacaoUpdate) -> bool:
         """Atualiza uma avaliação"""
@@ -78,3 +94,21 @@ class AvaliacaoService(BaseService):
             "total": data.get("total", 0),
             "distribuicao": distribuicao,
         }
+
+    async def create(self, avaliacao_data: dict) -> dict:
+        """Criar avaliação com serialização"""
+        avaliacao_data["data"] = datetime.utcnow()
+        result = await self.collection.insert_one(avaliacao_data)
+
+        created_avaliacao = await self.collection.find_one({"_id": result.inserted_id})
+        return self._serialize_avaliacao(created_avaliacao)
+
+    def _serialize_avaliacao(self, avaliacao: dict) -> dict:
+        """Serializa uma avaliação para o formato de resposta"""
+        if not avaliacao:
+            return None
+
+        avaliacao["id"] = str(avaliacao["_id"])
+        del avaliacao["_id"]
+
+        return avaliacao

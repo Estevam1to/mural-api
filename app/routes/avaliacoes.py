@@ -16,19 +16,17 @@ async def get_avaliacao_service(
     return AvaliacaoService(db)
 
 
-@router.post("/", response_model=dict, status_code=201)
-async def criar_avaliacao(
-    avaliacao: AvaliacaoCreate,
-    service: AvaliacaoService = Depends(get_avaliacao_service),
+@router.post("/", response_model=dict)
+async def create_avaliacao(
+    avaliacao: AvaliacaoCreate, db: AsyncIOMotorDatabase = Depends(get_database)
 ):
-    """Criar nova avaliação"""
+    """Criar uma nova avaliação"""
     try:
-        avaliacao_id = await service.create_avaliacao(avaliacao)
-        return {"id": avaliacao_id, "message": "Avaliação criada com sucesso"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        service = AvaliacaoService(db)
+        result = await service.create_avaliacao(avaliacao)
+        return result  # Return directly, not wrapped
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/", response_model=dict)

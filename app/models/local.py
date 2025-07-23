@@ -22,6 +22,24 @@ class LocalBase(BaseModel):
             raise ValueError("Longitude deve estar entre -180 e 180")
         return v
 
+    @validator("nome")
+    def validate_nome(cls, v):
+        if not v.strip():
+            raise ValueError("Nome não pode estar vazio")
+        return v.strip()
+
+    @validator("bairro")
+    def validate_bairro(cls, v):
+        if not v.strip():
+            raise ValueError("Bairro não pode estar vazio")
+        return v.strip()
+
+    @validator("cidade")
+    def validate_cidade(cls, v):
+        if not v.strip():
+            raise ValueError("Cidade não pode estar vazio")
+        return v.strip()
+
 
 class LocalCreate(LocalBase):
     pass

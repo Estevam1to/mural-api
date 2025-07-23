@@ -15,14 +15,15 @@ async def get_artista_service(
     return ArtistaService(db)
 
 
-@router.post("/", response_model=dict, status_code=201)
-async def criar_artista(
-    artista: ArtistaCreate, service: ArtistaService = Depends(get_artista_service)
+@router.post("/", response_model=dict)
+async def create_artista(
+    artista: ArtistaCreate, db: AsyncIOMotorDatabase = Depends(get_database)
 ):
-    """Criar novo artista"""
+    """Criar um novo artista"""
     try:
-        artista_id = await service.create_artista(artista)
-        return {"id": artista_id, "message": "Artista criado com sucesso"}
+        service = ArtistaService(db)
+        result = await service.create(artista.dict())
+        return result  # Return directly, not wrapped in another object
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

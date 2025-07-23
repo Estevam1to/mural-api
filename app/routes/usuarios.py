@@ -36,7 +36,6 @@ async def login_usuario(
     if not usuario:
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
-    # Verificar senha
     usuario_obj = Usuario(**usuario)
     if not usuario_obj.verify_password(login_data.senha):
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
